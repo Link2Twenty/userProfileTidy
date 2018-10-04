@@ -4,6 +4,7 @@ Powershell script to delete idle roaming profiles from a windows computer
 Usage: userProfileTidy.ps1 [OPTION...]
 -a, -age          Set minimum age of profiles, in days (required)
 -d, -debug        Output process to console for debugging
+-f, -force        Force culling, will remove local accounts with mismatched domain
 -dryrun           Run through process but do not commit any changes, debug implied
 -?, -h, -help     Display help screen
 
@@ -11,12 +12,14 @@ userProfileTidy.ps1 -age 28
 
 @author Andrew Bone <https://github.com/link2twenty>
 @licence MIT
-@version 0.0.1
+@version 0.0.2
 #>
 
 # Default value for age
 # Roaming accounts over this age will be removed
 $age = 30;
+$forceMode = 0;
+$safeProfiles = @( "networkservice","localservice","systemprofile" );
 
 # Check for -debug or -dryrun
 $dryrun = $args.contains('-dryrun') -or $args.contains('--dryrun');
@@ -36,6 +39,7 @@ function Show-Help() {
   Write-Host "-a, -age          Set minimum age of profiles, in days (required)"
   Write-Host "-d, -debug        Output process to console for debugging"
   Write-Host "-dryrun           Run through process but do not commit any changes, debug implied"
+  Write-Host "-f, -force        Force culling, will remove local accounts with mismatched domain";
   Write-Host "-?, -h, -help     Display help screen"
   exit 0
 }
@@ -49,16 +53,23 @@ function Set-Age($age) {
   $script:age = $age;
 }
 
+function Set-Force() {
+  $script:forceMode = 1;
+}
+
 # Check all arguments and do appropriate actions
 for ($i = 0; $i -lt $args.Length; $i++) {
   switch ($args[$i]) {
-    "-a" {Set-Age -age $args[$i + 1]};
-    "-age" {Set-Age -age $args[$i + 1]};
-    "--age" {Set-Age -age $args[$i + 1]};
-    "-?" {Show-Help};
-    "-h" {Show-Help};
-    "-help" {Show-Help};
-    "--help" {Show-Help};
+    "-a"      {Set-Age -age $args[$i + 1]};
+    "-age"    {Set-Age -age $args[$i + 1]};
+    "--age"   {Set-Age -age $args[$i + 1]};
+    "-f"      {Set-Force};
+    "-force"  {Set-Force};
+    "--force" {Set-Force};
+    "-?"      {Show-Help};
+    "-h"      {Show-Help};
+    "-help"   {Show-Help};
+    "--help"  {Show-Help};
   }
 }
 
@@ -74,9 +85,21 @@ Write-Log -msg "Discovered $($users.length) users";
 Foreach ($user in $users) {
   # Normalize profile name.
   $userPath = (Split-Path $user.LocalPath -Leaf).ToLower();
+  if ($safeProfiles.contains($userPath)) {
+    Write-log -color "magenta" -msg "User $userPath is secured"; 
+    continue;
+  };
   Write-log -msg "Checking user $userPath";
+  $script:domainMismatch = 0;
+  if($forceMode) {
+    $error.clear();
+    Get-LocalUser -Name $userPath -erroraction 'silentlycontinue' | out-null;
+    if($error) {
+      $script:domainMismatch = 1
+    }
+  };
   # If account is not Roaming skip
-  if (!$user.RoamingConfigured) {
+  if ((!$user.RoamingConfigured) -and $domainMismatch -eq 0) {
     Write-log -msg "User $userPath is local, skipping..."; 
     continue;
   };
