@@ -8,18 +8,19 @@ Usage: userProfileTidy.ps1 [OPTION...]
 -dryrun           Run through process but do not commit any changes, debug implied
 -?, -h, -help     Display help screen
 
-userProfileTidy.ps1 -age 28
+userProfileTidy.ps1 --age 28
 
 @author Andrew Bone <https://github.com/link2twenty>
 @licence MIT
-@version 0.0.2
+@version 0.0.3
 #>
 
 # Default value for age
 # Roaming accounts over this age will be removed
 $age = 30;
 $forceMode = 0;
-$safeProfiles = @( "networkservice","localservice","systemprofile" );
+# Manually enter users you want to be safe from removal
+$safeProfiles = @( );
 
 # Check for -debug or -dryrun
 $dryrun = $args.contains('-dryrun') -or $args.contains('--dryrun');
@@ -35,13 +36,13 @@ function Write-Log($head = "debug", $color = "yellow", $msg) {
 
 # Outputs help information to screen then quits
 function Show-Help() {
-  Write-Host "Usage: userProfileTidy.ps1 [OPTION...]"
-  Write-Host "-a, -age          Set minimum age of profiles, in days (required)"
-  Write-Host "-d, -debug        Output process to console for debugging"
-  Write-Host "-dryrun           Run through process but do not commit any changes, debug implied"
+  Write-Host "Usage: userProfileTidy.ps1 [OPTION...]";
+  Write-Host "-a, -age          Set minimum age of profiles, in days (required)";
+  Write-Host "-d, -debug        Output process to console for debugging";
+  Write-Host "-dryrun           Run through process but do not commit any changes, debug implied";
   Write-Host "-f, -force        Force culling, will remove local accounts with mismatched domain";
-  Write-Host "-?, -h, -help     Display help screen"
-  exit 0
+  Write-Host "-?, -h, -help     Display help screen";
+  exit 0;
 }
 
 # Sets $age depending on arguemets
@@ -85,8 +86,9 @@ Write-Log -msg "Discovered $($users.length) users";
 Foreach ($user in $users) {
   # Normalize profile name.
   $userPath = (Split-Path $user.LocalPath -Leaf).ToLower();
-  if ($safeProfiles.contains($userPath)) {
-    Write-log -color "magenta" -msg "User $userPath is secured"; 
+  # Skip `special` users
+  if ($safeProfiles.contains($userPath) -or $user.Special) {
+    Write-log -color "magenta" -msg "User $userPath is special"; 
     continue;
   };
   Write-log -msg "Checking user $userPath";
@@ -95,7 +97,7 @@ Foreach ($user in $users) {
     $error.clear();
     Get-LocalUser -Name $userPath -erroraction 'silentlycontinue' | out-null;
     if($error) {
-      $script:domainMismatch = 1
+      $script:domainMismatch = 1;
     }
   };
   # If account is not Roaming skip
@@ -105,7 +107,7 @@ Foreach ($user in $users) {
   };
   Write-log -head "start" -color "green" -msg "User $userPath has a roaming profile";
   # Calculate LoginAge based on LastLogin 
-  $userLastLogin = Get-Date -Year (($user.LastUseTime).Substring(0, 4)) -Month (($user.LastUseTime).Substring(4, 2)) -Day (($user.LastUseTime).Substring(6, 2));
+  $userLastLogin = $user.ConvertToDateTime($user.LastUseTime);
   $userLoginAge = (New-Timespan -Start $userLastLogin -End $today).Days;
   Write-log -msg "User $userPath last logged in $userLoginAge days ago";
   
