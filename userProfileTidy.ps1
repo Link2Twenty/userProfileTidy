@@ -12,7 +12,7 @@ userProfileTidy.ps1 --age 28
 
 @author Andrew Bone <https://github.com/link2twenty>
 @licence MIT
-@version 0.0.3
+@version 0.0.5
 #>
 
 # Default value for age
@@ -107,7 +107,19 @@ Foreach ($user in $users) {
   };
   Write-log -head "start" -color "green" -msg "User $userPath has a roaming profile";
   # Calculate LoginAge based on LastLogin 
-  $userLastLogin = $user.ConvertToDateTime($user.LastUseTime);
+  
+  if($user.LastUseTime) {
+    $script:date = $user.LastUseTime
+  } elseif($user.LastDownloadTime) {
+    $script:date = $user.LastDownloadTime
+  } elseif($user.LastuploadTime) {
+    $script:date = $user.LastuploadTime
+  } else {
+    $script:date = "19700101000000.000000+000"
+  }
+
+  $userLastLogin = $user.ConvertToDateTime($date);
+  
   $userLoginAge = (New-Timespan -Start $userLastLogin -End $today).Days;
   Write-log -msg "User $userPath last logged in $userLoginAge days ago";
   
