@@ -12,8 +12,10 @@ userProfileTidy.ps1 --age 28
 
 @author Andrew Bone <https://github.com/link2twenty>
 @licence MIT
-@version 0.0.5
+@version 0.0.6
 #>
+
+#Requires -RunAsAdministrator
 
 # Default value for age
 # Roaming accounts over this age will be removed
