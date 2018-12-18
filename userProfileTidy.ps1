@@ -12,7 +12,7 @@ userProfileTidy.ps1 --age 28
 
 @author Andrew Bone <https://github.com/link2twenty>
 @licence MIT
-@version 0.0.6
+@version 0.0.8
 #>
 
 #Requires -RunAsAdministrator
@@ -88,11 +88,6 @@ Write-Log -msg "Discovered $($users.length) users";
 Foreach ($user in $users) {
   # Normalize profile name.
   $userPath = (Split-Path $user.LocalPath -Leaf).ToLower();
-  # Skip `special` users
-  if ($safeProfiles.contains($userPath) -or $user.Special) {
-    Write-log -color "magenta" -msg "User $userPath is special"; 
-    continue;
-  };
   Write-log -msg "Checking user $userPath";
   $script:domainMismatch = 0;
   if($forceMode) {
@@ -102,25 +97,45 @@ Foreach ($user in $users) {
       $script:domainMismatch = 1;
     }
   };
+  # Skip `special` users
+  if ($safeProfiles.contains($userPath) -or $user.Special) {
+    Write-log -color "magenta" -msg "User $userPath is special, skipping..."; 
+    continue;
+  };
   # If account is not Roaming skip
   if ((!$user.RoamingConfigured) -and $domainMismatch -eq 0) {
-    Write-log -msg "User $userPath is local, skipping..."; 
+    Write-log -color "magenta" -msg "User $userPath is local, skipping..."; 
+    continue;
+  };
+  # If user is logged in skip
+  if ( query user $userPath 2>$null) {
+    Write-log -color "magenta" -msg "User $userPath is currently logged in, skipping..."; 
     continue;
   };
   Write-log -head "start" -color "green" -msg "User $userPath has a roaming profile";
   # Calculate LoginAge based on LastLogin 
-  
-  if($user.LastUseTime) {
-    $script:date = $user.LastUseTime
+
+  if (Test-Path $user.localPath) {
+    $script:userLastLogin = (Get-Item $user.localPath).LastWriteTime;
+    Write-log -msg "Getting localPath LastWriteTime: $script:userLastLogin";
+  } elseif($user.LastUseTime) {
+    $script:userLastLogin = $user.ConvertToDateTime($user.LastUseTime);
+    Write-log -msg "Getting LastUseTime: $script:userLastLogin";
   } elseif($user.LastDownloadTime) {
-    $script:date = $user.LastDownloadTime
+    $script:userLastLogin = $user.ConvertToDateTime($user.LastDownloadTime);
+    Write-log -msg "Getting LastDownloadTime: $script:userLastLogin";
   } elseif($user.LastuploadTime) {
-    $script:date = $user.LastuploadTime
+    $script:userLastLogin = $user.ConvertToDateTime($user.LastuploadTime);
+    Write-log -msg "Getting LastuploadTime: $script:userLastLogin";
   } else {
-    $script:date = "19700101000000.000000+000"
+    $script:userLastLogin = $user.ConvertToDateTime("19700101000000.000000+000");
   }
 
-  $userLastLogin = $user.ConvertToDateTime($date);
+  # Skip if date is not found
+  if ( !$script:userLastLogin ) {
+    Write-log -head "error" -color "red" -msg "Unable to find last login for user $userPath, skipping..."; 
+    continue;
+  }
   
   $userLoginAge = (New-Timespan -Start $userLastLogin -End $today).Days;
   Write-log -msg "User $userPath last logged in $userLoginAge days ago";
