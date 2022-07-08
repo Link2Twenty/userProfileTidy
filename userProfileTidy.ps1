@@ -81,7 +81,7 @@ $today = Get-Date;
 Write-Log -msg "Set date $today";
 
 # Get a list of all user profiles
-$users = Get-WmiObject Win32_UserProfile;
+$users = Get-CimInstance Win32_UserProfile;
 Write-Log -msg "Discovered $($users.length) users";
 
 # For each user in list
@@ -154,5 +154,5 @@ Foreach ($user in $users) {
 }
 
 # Update user list for new total
-$users = Get-WmiObject Win32_UserProfile;
+$users = Get-CimInstance Win32_UserProfile;
 Write-Log -msg "There are now $($users.length) users";
